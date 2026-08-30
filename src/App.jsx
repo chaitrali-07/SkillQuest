@@ -12,12 +12,13 @@ import {
   Mail, KeyRound, User, Code2, Palette, Braces, Coffee, Layers, Cpu, Terminal, Cloud,
 } from "lucide-react";
 import { auth, db } from "./firebase";
+import QuestView from "./QuestView";
 import "./App.css";
 
 /* ---------------------------------------------------------
-   SkillQuest — no forced sequence, and now real persistence:
-   a learner's known/learning technologies live in Firestore
-   at users/{uid}, not just in memory.
+   SkillQuest — no forced sequence, real Firestore persistence,
+   and now a working lesson flow: Start/Continue Quest opens the
+   real QuestView, and finishing it marks the tech as completed.
 --------------------------------------------------------- */
 
 const ACCENTS = ["cyan", "purple", "magenta"];
@@ -135,7 +136,7 @@ function StatsPanel({ known, learning }) {
   );
 }
 
-function TechnologyCard({ t }) {
+function TechnologyCard({ t, onStart }) {
   const Icon = t.icon;
   const label = t.state === "completed" ? "Review" : t.state === "learning" ? "Continue Quest" : "Start Quest";
   return (
@@ -154,7 +155,9 @@ function TechnologyCard({ t }) {
         <div className={`tech-progress-fill fill-${t.accent}`} style={{ width: `${t.progress}%` }} />
       </div>
       <p className="tech-progress-label">{t.progress}% complete</p>
-      <button className={`btn-tech btn-tech-${t.accent}`}>{label} <ArrowRight size={14} /></button>
+      <button className={`btn-tech btn-tech-${t.accent}`} onClick={() => onStart(t.name)}>
+        {label} <ArrowRight size={14} />
+      </button>
     </div>
   );
 }
@@ -285,7 +288,7 @@ function OnboardingPage({ onDone, initialKnown, initialLearning }) {
 }
 
 /* ---------- Home ---------- */
-function HomePage({ user, known, learning, onLogin, onSignup, onLogout, onGetStarted, onCustomize }) {
+function HomePage({ user, known, learning, onLogin, onSignup, onLogout, onGetStarted, onCustomize, onStartQuest }) {
   const tracks = useMemo(() => buildTracks(known, learning), [known, learning]);
 
   return (
@@ -318,7 +321,7 @@ function HomePage({ user, known, learning, onLogin, onSignup, onLogout, onGetSta
       <section className="section-block" id="tracks">
         <p className="section-label">CHOOSE YOUR QUEST</p>
         <div className="tech-grid">
-          {tracks.map((t) => <TechnologyCard key={t.name} t={t} />)}
+          {tracks.map((t) => <TechnologyCard key={t.name} t={t} onStart={onStartQuest} />)}
         </div>
       </section>
     </div>
@@ -452,6 +455,7 @@ export default function App() {
   const [known, setKnown] = useState(new Set());
   const [learning, setLearning] = useState(new Set());
   const [resolving, setResolving] = useState(true);
+  const [activeQuest, setActiveQuest] = useState(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -487,7 +491,59 @@ export default function App() {
     return unsubscribe;
   }, []);
 
+  /* Start (or resume) a quest for a given technology name. */
+  async function handleStartQuest(techName) {
+    if (!user) {
+      // No account yet — nothing to track progress against.
+      setAuthMode("signup");
+      setView("login");
+      return;
+    }
+
+    // If this technology isn't known or already being learned, mark it
+    // as "learning" the moment they start it, and persist that.
+    if (!known.has(techName) && !learning.has(techName)) {
+      const nextLearning = new Set(learning);
+      nextLearning.add(techName);
+      setLearning(nextLearning);
+      await saveProgress(user.uid, known, nextLearning);
+    }
+
+    setActiveQuest(techName);
+    setView("quest");
+  }
+
+  /* Called by QuestView when the learner finishes the last node. */
+  async function handleQuestComplete(techName) {
+    const nextKnown = new Set(known);
+    nextKnown.add(techName);
+    const nextLearning = new Set(learning);
+    nextLearning.delete(techName);
+
+    setKnown(nextKnown);
+    setLearning(nextLearning);
+    if (user) await saveProgress(user.uid, nextKnown, nextLearning);
+
+    setActiveQuest(null);
+    setView("home");
+  }
+
+  function handleExitQuest() {
+    setActiveQuest(null);
+    setView("home");
+  }
+
   if (resolving) return <LoadingScreen />;
+
+  if (view === "quest" && activeQuest) {
+    return (
+      <QuestView
+        questId={activeQuest}
+        onExit={handleExitQuest}
+        onComplete={handleQuestComplete}
+      />
+    );
+  }
 
   if (view === "onboarding") {
     return (
@@ -518,6 +574,7 @@ export default function App() {
       onSignup={() => { setAuthMode("signup"); setView("login"); }}
       onLogout={() => signOut(auth)}
       onCustomize={() => setView("onboarding")}
+      onStartQuest={handleStartQuest}
     />
   );
 }
