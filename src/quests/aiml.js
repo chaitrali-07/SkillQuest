@@ -13,7 +13,7 @@ export default {
       type: "lesson",
       title: "Data: Features & Labels",
       aiText: "ML models learn from a dataset — rows of examples with columns called features (the input information) and one label (the answer you want the model to learn to predict). For example: features could be a house's size and location, and the label would be its price.",
-      code: "<span class='comment'># feature 1   feature 2      label</span>\n<span class='comment'>#   size        location       price</span>\n<span class='comment'">   1200 sqft   Downtown     $250,000</span>"
+      code: "<span class='comment'># feature 1   feature 2      label</span>\n<span class='comment'>#   size        location       price</span>\n<span class='comment'>#   1200 sqft   Downtown       250000</span>"
     },
     {
       id: 2,
@@ -61,7 +61,7 @@ export default {
         "Install pandas (pip install pandas)",
         "Make a tiny CSV file yourself (5 rows, a few columns) in Notepad or Excel",
         "Load it with pandas.read_csv() and print the first rows using .head()",
-        "Decide which column would be the \"label\" if you were predicting something from this data"
+        "Decide which column would be the label if you were predicting something from this data"
       ],
       note: "Training an actual model comes in a later, more advanced quest — this step is just about getting comfortable looking at real data."
     }

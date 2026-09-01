@@ -7,7 +7,7 @@ import css from "./quests/css";
 import javascript from "./quests/javascript";
 import c from "./quests/c";
 import cpp from "./quests/cpp";
-import coreJava from "./quests/corejava";
+import coreJava from "./quests/coreJava";
 import advancedJava from "./quests/advjava";
 import python from "./quests/python";
 import aiml from "./quests/aiml";
@@ -25,7 +25,7 @@ const QUEST_DB = {
   "Fundamentals of AI & ML": aiml,
   "Cloud Computing": cloud,
 };
-
+7
 function AmbientBackground() {
   return (
     <div className="ambient-bg" aria-hidden="true">
@@ -34,7 +34,7 @@ function AmbientBackground() {
   );
 }
 
-export default function QuestView({ questId, onExit, onComplete }) {
+export default function QuestView({ questId, onExit, onComplete, onProgress, initialNodeIndex = 0 }) {
   const questData = QUEST_DB[questId] || {
     name: questId || "Unknown Quest",
     nodes: [
@@ -42,7 +42,11 @@ export default function QuestView({ questId, onExit, onComplete }) {
     ]
   };
 
-  const [currentNodeIdx, setCurrentNodeIdx] = useState(0);
+  // Clamp in case saved progress somehow points past the end of the list
+  // (e.g. a quest's node count changed since the learner last visited).
+  const clampedInitial = Math.min(Math.max(initialNodeIndex, 0), questData.nodes.length - 1);
+
+  const [currentNodeIdx, setCurrentNodeIdx] = useState(clampedInitial);
   const [selected, setSelected] = useState(null);
 
   const currentNode = questData.nodes[currentNodeIdx];
@@ -53,6 +57,14 @@ export default function QuestView({ questId, onExit, onComplete }) {
   useEffect(() => {
     setSelected(null);
   }, [currentNodeIdx]);
+
+  // Report the current position back up to the parent every time it
+  // changes (including on mount), so it can be saved to Firestore and
+  // used to resume from here next time.
+  useEffect(() => {
+    if (onProgress) onProgress(questId, currentNodeIdx, questData.nodes.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentNodeIdx, questId]);
 
   function handleNext() {
     if (isLast) {

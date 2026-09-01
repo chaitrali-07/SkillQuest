@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { auth, db } from "./firebase";
 import QuestView from "./QuestView";
+import ProfilePage from "./pages/ProfilePage";
 import "./App.css";
 
 /* ---------------------------------------------------------
@@ -163,7 +164,7 @@ function TechnologyCard({ t, onStart }) {
 }
 
 /* ---------- Nav ---------- */
-function NavBar({ user, onLogin, onSignup, onLogout, onCustomize }) {
+function NavBar({ user, onLogin, onSignup, onLogout, onCustomize, onProfile }) {
   const [open, setOpen] = useState(false);
   return (
     <nav className="navbar">
@@ -174,11 +175,14 @@ function NavBar({ user, onLogin, onSignup, onLogout, onCustomize }) {
       <div className="nav-links">
         <a href="#tracks" className="nav-link">Tracks</a>
         {user && <button className="nav-link nav-link-btn" onClick={onCustomize}>Customize tracks</button>}
+        {user && <button className="nav-link nav-link-btn" onClick={onProfile}>Profile</button>}
       </div>
       <div className="nav-right">
         {user ? (
           <>
-            <span className="nav-avatar">{(user.displayName || user.email)[0].toUpperCase()}</span>
+            <span className="nav-avatar" onClick={onProfile} style={{ cursor: "pointer" }}>
+              {(user.displayName || user.email)[0].toUpperCase()}
+            </span>
             <button className="btn-ghost" onClick={onLogout}>Log out</button>
           </>
         ) : (
@@ -195,6 +199,7 @@ function NavBar({ user, onLogin, onSignup, onLogout, onCustomize }) {
         <div className="mobile-menu panel">
           <a href="#tracks" className="nav-link">Tracks</a>
           {user && <button className="nav-link nav-link-btn" onClick={onCustomize}>Customize tracks</button>}
+          {user && <button className="nav-link nav-link-btn" onClick={onProfile}>Profile</button>}
           {user ? (
             <button className="btn-ghost" onClick={onLogout}>Log out</button>
           ) : (
@@ -288,13 +293,13 @@ function OnboardingPage({ onDone, initialKnown, initialLearning }) {
 }
 
 /* ---------- Home ---------- */
-function HomePage({ user, known, learning, onLogin, onSignup, onLogout, onGetStarted, onCustomize, onStartQuest }) {
+function HomePage({ user, known, learning, onLogin, onSignup, onLogout, onGetStarted, onCustomize, onProfile, onStartQuest }) {
   const tracks = useMemo(() => buildTracks(known, learning), [known, learning]);
 
   return (
     <div className="page-shell">
       <AmbientBackground />
-      <NavBar user={user} onLogin={onLogin} onSignup={onSignup} onLogout={onLogout} onCustomize={onCustomize} />
+      <NavBar user={user} onLogin={onLogin} onSignup={onSignup} onLogout={onLogout} onCustomize={onCustomize} onProfile={onProfile} />
 
       <section className="hero">
         <div className="hero-copy">
@@ -533,6 +538,14 @@ export default function App() {
     setView("home");
   }
 
+  /* Updates the Firebase display name, then refreshes local user state
+     so the nav avatar and Profile page reflect it immediately. */
+  async function handleUpdateName(newName) {
+    if (!auth.currentUser) return;
+    await updateProfile(auth.currentUser, { displayName: newName });
+    setUser({ ...auth.currentUser, displayName: newName });
+  }
+
   if (resolving) return <LoadingScreen />;
 
   if (view === "quest" && activeQuest) {
@@ -541,6 +554,20 @@ export default function App() {
         questId={activeQuest}
         onExit={handleExitQuest}
         onComplete={handleQuestComplete}
+      />
+    );
+  }
+
+  if (view === "profile") {
+    return (
+      <ProfilePage
+        user={user}
+        known={known}
+        learning={learning}
+        onBack={() => setView("home")}
+        onLogout={() => signOut(auth)}
+        onUpdateName={handleUpdateName}
+        onStartQuest={handleStartQuest}
       />
     );
   }
@@ -574,6 +601,7 @@ export default function App() {
       onSignup={() => { setAuthMode("signup"); setView("login"); }}
       onLogout={() => signOut(auth)}
       onCustomize={() => setView("onboarding")}
+      onProfile={() => setView("profile")}
       onStartQuest={handleStartQuest}
     />
   );
