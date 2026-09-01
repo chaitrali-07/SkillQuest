@@ -14,13 +14,8 @@ import {
 import { auth, db } from "./firebase";
 import QuestView from "./QuestView";
 import ProfilePage from "./pages/ProfilePage";
+import TracksPage from "./pages/TracksPage";
 import "./App.css";
-
-/* ---------------------------------------------------------
-   SkillQuest — no forced sequence, real Firestore persistence,
-   and now a working lesson flow: Start/Continue Quest opens the
-   real QuestView, and finishing it marks the tech as completed.
---------------------------------------------------------- */
 
 const ACCENTS = ["cyan", "purple", "magenta"];
 
@@ -49,7 +44,6 @@ function friendlyAuthError(code) {
   }
 }
 
-/* ---------- Firestore helpers ---------- */
 async function loadProgress(uid) {
   const snap = await getDoc(doc(db, "users", uid));
   if (!snap.exists()) return null;
@@ -76,7 +70,6 @@ function buildTracks(known, learning) {
   });
 }
 
-/* ---------- Background ---------- */
 function AmbientBackground() {
   return (
     <div className="ambient-bg" aria-hidden="true">
@@ -87,7 +80,6 @@ function AmbientBackground() {
   );
 }
 
-/* ---------- Learning path ---------- */
 function LearningPath({ tracks }) {
   return (
     <div className="path-list">
@@ -163,8 +155,7 @@ function TechnologyCard({ t, onStart }) {
   );
 }
 
-/* ---------- Nav ---------- */
-function NavBar({ user, onLogin, onSignup, onLogout, onCustomize, onProfile }) {
+function NavBar({ user, onLogin, onSignup, onLogout, onCustomize, onProfile, onTracks }) {
   const [open, setOpen] = useState(false);
   return (
     <nav className="navbar">
@@ -173,7 +164,7 @@ function NavBar({ user, onLogin, onSignup, onLogout, onCustomize, onProfile }) {
         <span className="brand-name">SkillQuest</span>
       </div>
       <div className="nav-links">
-        <a href="#tracks" className="nav-link">Tracks</a>
+        <button className="nav-link nav-link-btn" onClick={onTracks}>Tracks</button>
         {user && <button className="nav-link nav-link-btn" onClick={onCustomize}>Customize tracks</button>}
         {user && <button className="nav-link nav-link-btn" onClick={onProfile}>Profile</button>}
       </div>
@@ -197,7 +188,7 @@ function NavBar({ user, onLogin, onSignup, onLogout, onCustomize, onProfile }) {
       </div>
       {open && (
         <div className="mobile-menu panel">
-          <a href="#tracks" className="nav-link">Tracks</a>
+          <button className="nav-link nav-link-btn" onClick={onTracks}>Tracks</button>
           {user && <button className="nav-link nav-link-btn" onClick={onCustomize}>Customize tracks</button>}
           {user && <button className="nav-link nav-link-btn" onClick={onProfile}>Profile</button>}
           {user ? (
@@ -214,7 +205,6 @@ function NavBar({ user, onLogin, onSignup, onLogout, onCustomize, onProfile }) {
   );
 }
 
-/* ---------- Onboarding ---------- */
 function OnboardingPage({ onDone, initialKnown, initialLearning }) {
   const [known, setKnown] = useState(new Set(initialKnown));
   const [learning, setLearning] = useState(new Set(initialLearning));
@@ -292,14 +282,13 @@ function OnboardingPage({ onDone, initialKnown, initialLearning }) {
   );
 }
 
-/* ---------- Home ---------- */
-function HomePage({ user, known, learning, onLogin, onSignup, onLogout, onGetStarted, onCustomize, onProfile, onStartQuest }) {
+function HomePage({ user, known, learning, onLogin, onSignup, onLogout, onGetStarted, onCustomize, onProfile, onTracks, onStartQuest }) {
   const tracks = useMemo(() => buildTracks(known, learning), [known, learning]);
 
   return (
     <div className="page-shell">
       <AmbientBackground />
-      <NavBar user={user} onLogin={onLogin} onSignup={onSignup} onLogout={onLogout} onCustomize={onCustomize} onProfile={onProfile} />
+      <NavBar user={user} onLogin={onLogin} onSignup={onSignup} onLogout={onLogout} onCustomize={onCustomize} onProfile={onProfile} onTracks={onTracks} />
 
       <section className="hero">
         <div className="hero-copy">
@@ -310,7 +299,7 @@ function HomePage({ user, known, learning, onLogin, onSignup, onLogout, onGetSta
             <button className="btn-glow btn-large" onClick={user ? undefined : onGetStarted}>
               {user ? "Continue Quest" : "Start Your Quest"} <ArrowRight size={17} />
             </button>
-            <a href="#tracks" className="btn-outline btn-large">Explore Tracks</a>
+            <button className="btn-outline btn-large" onClick={onTracks}>Explore Tracks</button>
           </div>
         </div>
         <div className="hero-visual panel">
@@ -333,7 +322,6 @@ function HomePage({ user, known, learning, onLogin, onSignup, onLogout, onGetSta
   );
 }
 
-/* ---------- Auth ---------- */
 function AuthPage({ onBack, initialMode = "login" }) {
   const [mode, setMode] = useState(initialMode);
   const [name, setName] = useState("");
@@ -358,9 +346,6 @@ function AuthPage({ onBack, initialMode = "login" }) {
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
-      // No manual navigation here — the onAuthStateChanged listener in App
-      // picks up the new session, checks Firestore, and routes to
-      // onboarding (new user) or home (returning user) automatically.
     } catch (err) {
       setError(friendlyAuthError(err.code));
       setLoading(false);
@@ -439,7 +424,6 @@ function AuthPage({ onBack, initialMode = "login" }) {
   );
 }
 
-/* ---------- Simple loading state while we check auth + Firestore ---------- */
 function LoadingScreen() {
   return (
     <div className="page-shell">
@@ -481,7 +465,6 @@ export default function App() {
           setLearning(progress.learning);
           setView("home");
         } else {
-          // Brand new account — no Firestore doc yet.
           setKnown(new Set());
           setLearning(new Set());
           setView("onboarding");
@@ -496,17 +479,13 @@ export default function App() {
     return unsubscribe;
   }, []);
 
-  /* Start (or resume) a quest for a given technology name. */
   async function handleStartQuest(techName) {
     if (!user) {
-      // No account yet — nothing to track progress against.
       setAuthMode("signup");
       setView("login");
       return;
     }
 
-    // If this technology isn't known or already being learned, mark it
-    // as "learning" the moment they start it, and persist that.
     if (!known.has(techName) && !learning.has(techName)) {
       const nextLearning = new Set(learning);
       nextLearning.add(techName);
@@ -518,7 +497,6 @@ export default function App() {
     setView("quest");
   }
 
-  /* Called by QuestView when the learner finishes the last node. */
   async function handleQuestComplete(techName) {
     const nextKnown = new Set(known);
     nextKnown.add(techName);
@@ -538,8 +516,6 @@ export default function App() {
     setView("home");
   }
 
-  /* Updates the Firebase display name, then refreshes local user state
-     so the nav avatar and Profile page reflect it immediately. */
   async function handleUpdateName(newName) {
     if (!auth.currentUser) return;
     await updateProfile(auth.currentUser, { displayName: newName });
@@ -567,6 +543,22 @@ export default function App() {
         onBack={() => setView("home")}
         onLogout={() => signOut(auth)}
         onUpdateName={handleUpdateName}
+        onStartQuest={handleStartQuest}
+      />
+    );
+  }
+
+  if (view === "tracks") {
+    return (
+      <TracksPage
+        user={user}
+        known={known}
+        learning={learning}
+        onHome={() => setView("home")}
+        onLogin={() => { setAuthMode("login"); setView("login"); }}
+        onSignup={() => { setAuthMode("signup"); setView("login"); }}
+        onLogout={() => signOut(auth)}
+        onProfile={() => setView("profile")}
         onStartQuest={handleStartQuest}
       />
     );
@@ -602,6 +594,7 @@ export default function App() {
       onLogout={() => signOut(auth)}
       onCustomize={() => setView("onboarding")}
       onProfile={() => setView("profile")}
+      onTracks={() => setView("tracks")}
       onStartQuest={handleStartQuest}
     />
   );
